@@ -20,7 +20,9 @@ pub async fn upload_file(path: &Path) -> Result<DriveFile> {
         .and_then(|name| name.to_str())
         .ok_or_else(|| anyhow::anyhow!("Failed to get file name"))?;
 
-    let file_bytes = tokio::fs::read(path).await?;
+    let file = tokio::fs::File::open(path).await?;
+    let file_len = file.metadata().await?.len();
+    let file_stream = tokio_util::io::ReaderStream::new(file);
 
     let client = Client::new();
 
@@ -31,8 +33,11 @@ pub async fn upload_file(path: &Path) -> Result<DriveFile> {
     let metadata_part =
         reqwest::multipart::Part::text(metadata.to_string()).mime_str("application/json")?;
 
-    let file_part =
-        reqwest::multipart::Part::bytes(file_bytes).mime_str("application/octet-stream")?;
+    let file_part = reqwest::multipart::Part::stream_with_length(
+        reqwest::Body::wrap_stream(file_stream),
+        file_len,
+    )
+    .mime_str("application/octet-stream")?;
 
     let form = reqwest::multipart::Form::new()
         .part("metadata", metadata_part)
