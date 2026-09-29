@@ -22,7 +22,7 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
 
             println!("Uploaded successfully!");
             println!("Name: {}", file.name);
-            println!("ID: {}", file.id);
+            println!("Link: https://drive.google.com/file/d/{}", file.id);
         }
     }
 
