@@ -13,6 +13,18 @@ use tokio::{
 const SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
 const AUTH_URI: &str = "https://accounts.google.com/o/oauth2/auth";
 const TOKEN_URI: &str = "https://oauth2.googleapis.com/token";
+const ABOUT_URI: &str = "https://www.googleapis.com/drive/v3/about?fields=user";
+
+#[derive(Deserialize)]
+struct About {
+    user: AboutUser,
+}
+
+#[derive(Deserialize)]
+struct AboutUser {
+    #[serde(rename = "emailAddress")]
+    email_address: String,
+}
 
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -50,13 +62,17 @@ pub async fn gdrive_auth() -> anyhow::Result<()> {
 
     let tokens = exchange_code(&code, &oauth, &redirect_uri, &verifier).await?;
 
-    if let Some(refresh_token) = &tokens.refresh_token {
-        crate::auth::token_store::save_refresh_token("google", refresh_token)?;
-    } else {
+    let Some(refresh_token) = &tokens.refresh_token else {
         anyhow::bail!("Google did not return a refresh token");
-    }
+    };
 
-    println!("Google Auth is Successfull!");
+    let email = fetch_email(&tokens.access_token).await?;
+    let id = super::accounts::add("google", &email)?;
+
+    crate::auth::token_store::save_refresh_token(&id, refresh_token)?;
+    crate::auth::token_store::cache_access_token(&id, &tokens.access_token, tokens.expires_in)?;
+
+    println!("Connected {email}");
     Ok(())
 }
 
@@ -197,23 +213,34 @@ async fn refresh_access_token(
     Ok(tokens)
 }
 
+async fn fetch_email(access_token: &str) -> anyhow::Result<String> {
+    let about = reqwest::Client::new()
+        .get(ABOUT_URI)
+        .bearer_auth(access_token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<About>()
+        .await?;
+
+    Ok(about.user.email_address)
+}
+
 pub async fn get_google_access_token() -> anyhow::Result<String> {
-    if let Some(access_token) = crate::auth::token_store::get_cached_access_token("google")? {
+    let (id, _) = super::accounts::active_for("google")?;
+
+    if let Some(access_token) = crate::auth::token_store::get_cached_access_token(&id)? {
         return Ok(access_token);
     }
 
     let oauth = super::credentials::get("google")?
         .ok_or_else(|| anyhow::anyhow!("not connected to google - run `transit config` first"))?;
 
-    let refresh_token = crate::auth::token_store::get_refresh_token("google")?;
+    let refresh_token = crate::auth::token_store::get_refresh_token(&id)?;
 
     let tokens = refresh_access_token(&refresh_token, &oauth).await?;
 
-    crate::auth::token_store::cache_access_token(
-        "google",
-        &tokens.access_token,
-        tokens.expires_in,
-    )?;
+    crate::auth::token_store::cache_access_token(&id, &tokens.access_token, tokens.expires_in)?;
 
     Ok(tokens.access_token)
 }

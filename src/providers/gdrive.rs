@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::path::Path;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use futures_util::TryStreamExt;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use crate::auth::get_google_access_token;
 use crate::auth::token_store::{config_file, load_from, save_to};
@@ -25,6 +26,84 @@ const MAX_RETRIES: u32 = 5;
 pub struct DriveFile {
     pub id: String,
     pub name: String,
+    #[serde(rename = "webViewLink")]
+    pub web_view_link: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DriveEntry {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    size: Option<String>,
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+    #[serde(rename = "modifiedTime")]
+    pub modified_time: String,
+    #[serde(rename = "webViewLink")]
+    pub web_view_link: Option<String>,
+}
+
+impl DriveEntry {
+    pub fn size_bytes(&self) -> Option<u64> {
+        self.size.as_deref().and_then(|s| s.parse().ok())
+    }
+
+    pub fn is_folder(&self) -> bool {
+        self.mime_type == "application/vnd.google-apps.folder"
+    }
+}
+
+#[derive(Deserialize)]
+struct FileList {
+    #[serde(default)]
+    files: Vec<DriveEntry>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
+}
+
+pub async fn list_files(limit: usize) -> Result<Vec<DriveEntry>> {
+    let access_token = get_google_access_token().await?;
+    let client = Client::new();
+
+    let mut entries = Vec::new();
+    let mut page_token: Option<String> = None;
+
+    loop {
+        let remaining = limit.saturating_sub(entries.len());
+        if remaining == 0 {
+            break;
+        }
+
+        let mut query = vec![
+            ("fields", "nextPageToken,files(id,name,size,mimeType,modifiedTime,webViewLink)".to_string()),
+            ("orderBy", "modifiedTime desc".to_string()),
+            ("q", "trashed = false".to_string()),
+            ("pageSize", remaining.min(100).to_string()),
+        ];
+        if let Some(token) = &page_token {
+            query.push(("pageToken", token.clone()));
+        }
+
+        let page = client
+            .get("https://www.googleapis.com/drive/v3/files")
+            .bearer_auth(&access_token)
+            .query(&query)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<FileList>()
+            .await?;
+
+        entries.extend(page.files);
+
+        match page.next_page_token {
+            Some(token) => page_token = Some(token),
+            None => break,
+        }
+    }
+
+    Ok(entries)
 }
 
 pub async fn upload_file(path: &Path) -> Result<DriveFile> {
@@ -43,7 +122,8 @@ pub async fn upload_file(path: &Path) -> Result<DriveFile> {
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
-    let key = session_key(path, &meta)?;
+    let (account_id, _) = crate::auth::accounts::active_for("google")?;
+    let key = session_key(&account_id, path, &meta)?;
 
     let (session_uri, mut offset) = match saved_session(&key)? {
         Some(uri) => match server_offset(&client, &uri, total).await {
@@ -156,7 +236,7 @@ async fn start_session(
     total: u64,
 ) -> Result<String> {
     let response = client
-        .post("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable")
+        .post("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink")
         .bearer_auth(access_token)
         .header(CONTENT_TYPE, "application/json; charset=UTF-8")
         .header("X-Upload-Content-Type", "application/octet-stream")
@@ -207,13 +287,13 @@ fn acknowledged(range: Option<&reqwest::header::HeaderValue>) -> u64 {
 
 /// Size and mtime are part of the key so an edited file starts a fresh upload
 /// rather than resuming onto stale bytes.
-fn session_key(path: &Path, meta: &std::fs::Metadata) -> Result<String> {
+fn session_key(account_id: &str, path: &Path, meta: &std::fs::Metadata) -> Result<String> {
     let modified = meta
         .modified()?
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
     Ok(format!(
-        "{}:{}:{}",
+        "{account_id}|{}:{}:{}",
         path.canonicalize()?.display(),
         meta.len(),
         modified
@@ -264,4 +344,133 @@ mod tests {
         let junk = HeaderValue::from_static("bytes=garbage");
         assert_eq!(acknowledged(Some(&junk)), 0, "unparseable falls back to restart");
     }
+}
+
+const FILE_FIELDS: &str = "id,name,size,mimeType,modifiedTime,webViewLink";
+
+pub async fn file_metadata(id: &str) -> Result<DriveEntry> {
+    let access_token = get_google_access_token().await?;
+
+    Ok(Client::new()
+        .get(format!("https://www.googleapis.com/drive/v3/files/{id}"))
+        .bearer_auth(access_token)
+        .query(&[("fields", FILE_FIELDS)])
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<DriveEntry>()
+        .await?)
+}
+
+/// Accepts a Drive link, a bare file id, or a file name.
+pub async fn resolve(input: &str) -> Result<DriveEntry> {
+    if let Some(id) = id_from_link(input) {
+        return file_metadata(&id).await;
+    }
+    if looks_like_id(input) {
+        return file_metadata(input).await;
+    }
+
+    let mut matches: Vec<DriveEntry> = list_files(500)
+        .await?
+        .into_iter()
+        .filter(|entry| entry.name == input)
+        .collect();
+
+    match matches.len() {
+        0 => anyhow::bail!("no file named {input:?} - run `transit list` to see what is there"),
+        1 => Ok(matches.remove(0)),
+        n => {
+            let links: Vec<String> = matches
+                .iter()
+                .map(|e| format!("  {} {}", e.modified_time.get(..16).unwrap_or(""), e.id))
+                .collect();
+            anyhow::bail!(
+                "{n} files named {input:?} - pass an id or link instead:\n{}",
+                links.join("\n")
+            )
+        }
+    }
+}
+
+fn id_from_link(input: &str) -> Option<String> {
+    if !input.starts_with("http") {
+        return None;
+    }
+    let parts: Vec<&str> = input.split('/').collect();
+    parts
+        .iter()
+        .position(|part| *part == "d" || *part == "folders")
+        .and_then(|at| parts.get(at + 1))
+        .map(|id| id.split('?').next().unwrap_or(id).to_string())
+}
+
+fn looks_like_id(input: &str) -> bool {
+    input.len() >= 20
+        && input
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+pub async fn download_file(entry: &DriveEntry, dest: &Path) -> Result<()> {
+    anyhow::ensure!(
+        !entry.mime_type.starts_with("application/vnd.google-apps"),
+        "{} is a Google {} and has no binary form to download",
+        entry.name,
+        entry.mime_type.rsplit('.').next().unwrap_or("document")
+    );
+
+    let access_token = get_google_access_token().await?;
+    let total = entry.size_bytes();
+
+    let have = tokio::fs::metadata(dest).await.map(|m| m.len()).unwrap_or(0);
+    if Some(have) == total && have > 0 {
+        println!("Already downloaded: {}", dest.display());
+        return Ok(());
+    }
+
+    let mut request = Client::new()
+        .get(format!(
+            "https://www.googleapis.com/drive/v3/files/{}?alt=media",
+            entry.id
+        ))
+        .bearer_auth(access_token);
+    if have > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={have}-"));
+    }
+
+    let response = request.send().await?.error_for_status()?;
+    let resuming = response.status() == StatusCode::PARTIAL_CONTENT;
+    let start = if resuming { have } else { 0 };
+    if have > 0 && !resuming {
+        println!("Server sent the whole file; restarting the download.");
+    }
+
+    let file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(resuming)
+        .truncate(!resuming)
+        .open(dest)
+        .await?;
+
+    let progress = ProgressBar::new(total.unwrap_or(0));
+    progress.set_style(
+        ProgressStyle::with_template(
+            "{bar:40.cyan/blue} {bytes}/{total_bytes} ({bytes_per_sec}, eta {eta})",
+        )?
+        .progress_chars("=>-"),
+    );
+    progress.set_position(start);
+
+    let stream = response
+        .bytes_stream()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+    let mut reader = progress.wrap_async_read(tokio_util::io::StreamReader::new(stream));
+    let mut writer = file;
+    tokio::io::copy(&mut reader, &mut writer).await?;
+    writer.flush().await?;
+    progress.finish_and_clear();
+
+    Ok(())
 }

@@ -2,6 +2,7 @@ use anyhow::Ok;
 use clap::Parser;
 
 mod config;
+mod picker;
 mod providers;
 mod auth;
 
