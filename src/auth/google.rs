@@ -35,7 +35,7 @@ struct TokenResponse {
 }
 
 pub async fn gdrive_auth() -> anyhow::Result<()> {
-    let oauth = super::credentials::configure("google")?;
+    let oauth = super::credentials::get_or_prompt("google")?;
 
     println!("Starting gdrive authentication");
 
@@ -235,7 +235,7 @@ pub async fn get_google_access_token() -> anyhow::Result<String> {
     }
 
     let oauth = super::credentials::get("google")?
-        .ok_or_else(|| anyhow::anyhow!("not connected to google - run `transit config` first"))?;
+        .ok_or_else(|| anyhow::anyhow!("not connected to google - run `transit account add` first"))?;
 
     let refresh_token = crate::auth::token_store::get_refresh_token(&id)?;
 

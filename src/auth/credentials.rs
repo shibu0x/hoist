@@ -44,12 +44,50 @@ pub fn save(provider: &str, client: &OAuthClient) -> Result<()> {
     save_to(&path, &stored)
 }
 
-pub fn configure(provider: &str) -> Result<OAuthClient> {
+/// `account add` path: reuse the saved client, prompt only when there is none.
+/// Deliberately never asks about replacing - that is `client set`'s job, and
+/// asking here is what made "Replace it?" appear while connecting an account.
+pub fn get_or_prompt(provider: &str) -> Result<OAuthClient> {
+    match get(provider)? {
+        Some(client) => Ok(client),
+        None => prompt_and_save(provider),
+    }
+}
+
+/// `client show` path.
+pub fn describe(provider: &str) -> Result<()> {
+    let upper = provider.to_uppercase();
+
+    if let Some(client) = from_env(provider) {
+        println!("Client: {}", hint(&client.client_id));
+        println!("Source: TRANSIT_{upper}_CLIENT_ID / TRANSIT_{upper}_CLIENT_SECRET");
+        println!("These shadow the stored file - unset them to use the saved client.");
+        return Ok(());
+    }
+
+    match from_file(provider)? {
+        Some(client) => {
+            println!("Client: {}", hint(&client.client_id));
+            println!("Source: {}", config_file(FILE)?.display());
+        }
+        None => println!("No {provider} OAuth client set - run `transit client set`"),
+    }
+
+    Ok(())
+}
+
+/// `client set` path: always ends with a client stored.
+pub fn set(provider: &str) -> Result<OAuthClient> {
     if let Some(existing) = from_file(provider)? {
-        println!("A {provider} client is already saved: {}", hint(&existing.client_id));
+        // Say "OAuth client" explicitly: "client" alone reads as "account".
+        println!(
+            "Saved {provider} Cloud OAuth client: {}",
+            hint(&existing.client_id)
+        );
+        println!("(your app registration in the provider's console - not an account)");
 
         let replace = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Replace it?")
+            .with_prompt("Use a different OAuth client?")
             .default(false)
             .interact()?;
 

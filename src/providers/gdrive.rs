@@ -48,10 +48,6 @@ impl DriveEntry {
     pub fn size_bytes(&self) -> Option<u64> {
         self.size.as_deref().and_then(|s| s.parse().ok())
     }
-
-    pub fn is_folder(&self) -> bool {
-        self.mime_type == "application/vnd.google-apps.folder"
-    }
 }
 
 #[derive(Deserialize)]

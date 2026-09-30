@@ -63,7 +63,7 @@ pub fn get_refresh_token(provider: &str) -> Result<String> {
 
     load_from::<HashMap<String, String>>(&tokens_path()?)?
         .remove(provider)
-        .with_context(|| format!("not connected to {provider} - run `transit config` first"))
+        .with_context(|| format!("not connected to {provider} - run `transit account add` first"))
 }
 
 pub(crate) fn config_file(name: &str) -> Result<PathBuf> {
