@@ -474,3 +474,17 @@ pub async fn download_file(entry: &DriveEntry, dest: &Path) -> Result<()> {
 
     Ok(())
 }
+
+pub fn forget_sessions_for(account_id: &str) -> Result<()> {
+    let path = config_file(SESSIONS_FILE)?;
+    let mut sessions: HashMap<String, String> = load_from(&path)?;
+    let prefix = format!("{account_id}|");
+
+    let before = sessions.len();
+    sessions.retain(|key, _| !key.starts_with(&prefix));
+    if sessions.len() != before {
+        save_to(&path, &sessions)?;
+    }
+
+    Ok(())
+}

@@ -1,4 +1,3 @@
-use anyhow::Ok;
 use clap::Parser;
 
 mod config;

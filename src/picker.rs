@@ -9,11 +9,12 @@ const SEARCH_MAX_HITS: usize = 200;
 enum Row {
     Up,
     Search,
+    Cancel,
     Enter(PathBuf),
     Pick(PathBuf),
 }
 
-pub fn pick_file(start: &Path) -> Result<PathBuf> {
+pub fn pick_file(start: &Path) -> Result<Option<PathBuf>> {
     let mut current = start
         .canonicalize()
         .unwrap_or_else(|_| PathBuf::from("."));
@@ -27,27 +28,33 @@ pub fn pick_file(start: &Path) -> Result<PathBuf> {
         }
         rows.push(Row::Search);
         labels.push("[ search this folder and below ]".to_string());
+        rows.push(Row::Cancel);
+        labels.push("[ cancel ]".to_string());
 
         for (row, label) in read_dir_sorted(&current) {
             rows.push(row);
             labels.push(label);
         }
-
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        
+        let Some(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(current.display().to_string())
             .default(0)
             .items(&labels)
-            .interact()?;
+            .interact_opt()?
+        else {
+            return Ok(None);
+        };
 
         match &rows[selection] {
             Row::Up => {
                 current.pop();
             }
+            Row::Cancel => return Ok(None),
             Row::Enter(path) => current = path.clone(),
-            Row::Pick(path) => return Ok(path.clone()),
+            Row::Pick(path) => return Ok(Some(path.clone())),
             Row::Search => {
                 if let Some(path) = search(&current)? {
-                    return Ok(path);
+                    return Ok(Some(path));
                 }
             }
         }
@@ -114,11 +121,14 @@ fn search(root: &Path) -> Result<Option<PathBuf>> {
         })
         .collect();
 
-    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+    let Some(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt(format!("{} match(es)", hits.len()))
         .default(0)
         .items(&labels)
-        .interact()?;
+        .interact_opt()?
+    else {
+        return Ok(None);
+    };
 
     Ok(Some(hits[selection].clone()))
 }

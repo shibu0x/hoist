@@ -1,6 +1,5 @@
-use anyhow::Ok;
 use clap::Subcommand;
-use dialoguer::{Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use indicatif::HumanBytes;
 
 use crate::{Cli, auth::accounts, auth::gdrive_auth, providers};
@@ -20,6 +19,7 @@ pub enum Commands {
         #[arg(long)]
         out: Option<String>,
     },
+    Remove
 }
 
 pub async fn config(cli: Cli) -> anyhow::Result<()> {
@@ -107,7 +107,13 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
 
             let path = match path {
                 Some(given) => crate::picker::resolve_path(&given)?,
-                None => crate::picker::pick_file(&std::env::current_dir()?)?,
+                None => match crate::picker::pick_file(&std::env::current_dir()?)? {
+                    Some(picked) => picked,
+                    None => {
+                        println!("Cancelled.");
+                        return Ok(());
+                    }
+                },
             };
 
             println!("Uploading {} to {}", path.display(), account.email);
@@ -120,6 +126,61 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
                 "Link: {}",
                 file.web_view_link.as_deref().unwrap_or(&file.id)
             );
+        }
+
+        Commands::Remove => {
+            let accounts = accounts::list()?;
+
+            if accounts.known.is_empty() {
+                println!("No account to remove from the list, use 'transit config' to configure an account");
+                return Ok(())
+            }
+
+            let ids : Vec<&String> = accounts.known.keys().collect();
+
+            let mut items : Vec<String> = accounts.known.values().map(|account| {
+                let active = accounts.active.as_deref() == Some(account.id().as_str());
+                format!("{}{}",account.email,if active{ "   (active)"} else { "" })
+            })
+            .collect();
+
+            items.push("Exit".to_string());
+
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select an account to remove")
+                .default(0)
+                .items(&items)
+                .interact()?;
+
+            if selection < ids.len() {
+                let id = ids[selection];
+                let email = &accounts.known[id].email;
+
+                if !Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt(format!(
+                        "Remove {email} and revoke transit's access to it?"
+                    ))
+                    .default(false)
+                    .interact()?
+                {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+                
+                match crate::auth::gdrive_revoke(id).await {
+                    Ok(()) => println!("Revoked access for {email}"),
+                    Err(e) => println!(
+                        "Could not revoke remotely ({e}).\n\
+                         Remove it by hand at https://myaccount.google.com/permissions"
+                    ),
+                }
+
+                crate::auth::token_store::forget_account(id)?;
+                providers::gdrive::forget_sessions_for(id)?;
+                accounts::remove_account(id)?;
+
+                println!("Removed account {email}");
+            }
         }
     }
 

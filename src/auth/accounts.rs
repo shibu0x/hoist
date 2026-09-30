@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+
 use super::token_store::{config_file, load_from, save_to};
 
 const FILE: &str = "accounts.json";
@@ -71,4 +72,15 @@ pub fn active_for(provider: &str) -> Result<(String, Account)> {
     );
 
     Ok((id, account.clone()))
+}
+
+pub fn remove_account(id: &str) -> Result<()> {
+    let mut accounts = list()?;
+    anyhow::ensure!(accounts.known.remove(id).is_some(), "unknown account: {id}");
+
+    if accounts.active.as_deref() == Some(id) {
+        accounts.active = accounts.known.keys().next().cloned();
+    }
+
+    store(&accounts)
 }

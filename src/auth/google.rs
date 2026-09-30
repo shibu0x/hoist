@@ -13,6 +13,7 @@ use tokio::{
 const SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
 const AUTH_URI: &str = "https://accounts.google.com/o/oauth2/auth";
 const TOKEN_URI: &str = "https://oauth2.googleapis.com/token";
+const REVOKE_URI: &str = "https://oauth2.googleapis.com/revoke";
 const ABOUT_URI: &str = "https://www.googleapis.com/drive/v3/about?fields=user";
 
 #[derive(Deserialize)]
@@ -243,4 +244,17 @@ pub async fn get_google_access_token() -> anyhow::Result<String> {
     crate::auth::token_store::cache_access_token(&id, &tokens.access_token, tokens.expires_in)?;
 
     Ok(tokens.access_token)
+}
+
+pub async fn gdrive_revoke(account_id: &str) -> anyhow::Result<()> {
+    let refresh_token = crate::auth::token_store::get_refresh_token(account_id)?;
+
+    reqwest::Client::new()
+        .post(REVOKE_URI)
+        .form(&[("token", refresh_token.as_str())])
+        .send()
+        .await?
+        .error_for_status()?;
+
+    Ok(())
 }

@@ -16,7 +16,7 @@ fn env_var(provider: &str) -> String {
     format!("TRANSIT_{}_REFRESH_TOKEN", provider.to_uppercase())
 }
 
-fn keyring_entry(provider: &str) -> keyring::Result<Entry> {
+pub fn keyring_entry(provider: &str) -> keyring::Result<Entry> {
     Entry::new(SERVICE, provider)
 }
 
@@ -34,6 +34,21 @@ pub fn save_refresh_token(provider: &str, refresh_token: &str) -> Result<()> {
             Ok(())
         }
     }
+}
+
+pub fn forget_account(account_id: &str) -> Result<()> {
+    if let Ok(entry) = keyring_entry(account_id) {
+        let _ = entry.delete_credential();
+    }
+    forget_file_token(account_id)?;
+
+    let path = cache_path()?;
+    let mut cache: HashMap<String, CachedToken> = load_from(&path)?;
+    if cache.remove(account_id).is_some() {
+        save_to(&path, &cache)?;
+    }
+
+    Ok(())
 }
 
 pub fn get_refresh_token(provider: &str) -> Result<String> {
