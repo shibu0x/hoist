@@ -1,7 +1,6 @@
 # transit
 
-Upload and download files to cloud storage from the terminal. Google Drive
-today; S3, Dropbox and others planned.
+Upload and download files to google drive from the terminal.
 
 - Resumable uploads and downloads — a dropped connection continues where it left off
 - Multiple accounts, switch between them
@@ -30,13 +29,34 @@ transit account add     # paste your Client ID + Secret, then approve in the bro
 ```sh
 transit upload ./report.pdf          # upload a file
 transit upload                       # browse and search for one instead
-transit list                         # what have I uploaded?
+transit list                         # what is at the top level?
 transit download report.pdf          # by name
 transit download 'https://drive.google.com/file/d/1AbC.../view'
 transit download 1AbC... --out ~/Downloads/report.pdf
 ```
 
 Quote Drive links in zsh — the `?` in them is a glob character.
+
+### Folders
+
+```sh
+transit mkdir reports/2026/q1                      # creates every missing level
+transit upload ./q1.pdf --folder reports/2026/q1   # creates the folder if needed
+transit list reports/2026                          # folders first, trailing /
+transit list reports/2026/q1 --limit 100
+```
+
+`--folder` and `mkdir` both behave like `mkdir -p`: a path is walked segment by
+segment and anything missing is created. `list` is the opposite — it never
+creates, so a typo'd folder reports an error instead of silently producing an
+empty one.
+
+Paths are relative to the top level of the account's Drive. `list` with no
+argument shows the top level; pass a folder path or id to descend. Folders have
+no size and show as `-`.
+
+A note on `drive.file` scope: the only folders transit can see are the ones it
+created, so this tree is transit's own, not your whole Drive.
 
 ### Accounts
 
@@ -206,6 +226,6 @@ rm -rf ~/.config/transit          # everything, including the OAuth client
 
 ## Not yet supported
 
-Folders (everything uploads to Drive root), deleting remote files, Google Docs
-export, headless auth (the browser flow needs a display), and providers other
-than Google Drive.
+Deleting remote files, uploading a whole directory at once, Google Docs export,
+headless auth (the browser flow needs a display), and providers other than
+Google Drive.

@@ -21,12 +21,21 @@ pub enum Commands {
         action: ClientAction,
     },
     /// Upload a file. Omit the path to browse and search for one.
-    Upload { path: Option<String> },
-    /// List files this tool has uploaded
+    Upload {
+        path: Option<String>,
+        /// Destination folder path, created if missing (like mkdir -p)
+        #[arg(long)]
+        folder: Option<String>,
+    },
+    /// List a folder's contents. Defaults to the top level.
     List {
+        /// Folder path or id. Omit for the top level.
+        folder: Option<String>,
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    /// Create a folder, including any missing parents
+    Mkdir { path: String },
     /// Download a file by link, id, or name
     Download {
         target: String,
@@ -65,7 +74,13 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             ClientAction::Show => crate::auth::credentials::describe("google")?,
         },
 
-        Commands::Upload { path } => {
+        Commands::Mkdir { path } => {
+            let (_, account) = accounts::active_for("google")?;
+            providers::gdrive::ensure_folder_path(&path).await?;
+            println!("Folder {path} ready on {}", account.email);
+        }
+
+        Commands::Upload { path, folder } => {
             let (_, account) = accounts::active_for("google")?;
 
             let path = match path {
@@ -79,8 +94,20 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
                 },
             };
 
-            println!("Uploading {} to {}", path.display(), account.email);
-            let file = providers::gdrive::upload_file(&path).await?;
+            // Create the destination if needed: an upload that fails because a
+            // folder is missing is worse than one that makes it.
+            let parent = match &folder {
+                Some(folder) => Some(providers::gdrive::ensure_folder_path(folder).await?),
+                None => None,
+            };
+
+            println!(
+                "Uploading {} to {}{}",
+                path.display(),
+                account.email,
+                folder.map(|f| format!(" ({f})")).unwrap_or_default()
+            );
+            let file = providers::gdrive::upload_file(&path, parent.as_deref()).await?;
 
             println!("Uploaded successfully!");
             println!("Name: {}", file.name);
@@ -90,14 +117,21 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             );
         }
 
-        Commands::List { limit } => {
+        Commands::List { folder, limit } => {
             let (_, account) = accounts::active_for("google")?;
-            let entries = providers::gdrive::list_files(limit).await?;
 
+            let parent = match &folder {
+                Some(path) => providers::gdrive::resolve_folder(path).await?,
+                None => providers::gdrive::ROOT.to_string(),
+            };
+            let entries = providers::gdrive::list_folder(&parent, limit).await?;
+
+            let location = folder.as_deref().unwrap_or("top level");
             if entries.is_empty() {
-                println!("No files yet for {}.", account.email);
+                println!("Nothing in {location} for {}.", account.email);
                 return Ok(());
             }
+            println!("{location} - {}\n", account.email);
 
             println!(
                 "{:<32} {:>10}  {:<16}  {:<24}  {}",
@@ -108,13 +142,18 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
                     .size_bytes()
                     .map(|bytes| HumanBytes(bytes).to_string())
                     .unwrap_or_else(|| "-".to_string());
+                let name = if entry.is_folder() {
+                    format!("{}/", entry.name)
+                } else {
+                    entry.name.clone()
+                };
 
                 println!(
                     "{:<32} {:>10}  {:<16}  {:<24}  {}",
-                    truncate(&entry.name, 32),
+                    truncate(&name, 32),
                     size,
                     &entry.modified_time.replace('T', " ")[..16.min(entry.modified_time.len())],
-                    truncate(&entry.mime_type, 24),
+                    truncate(if entry.is_folder() { "folder" } else { &entry.mime_type }, 24),
                     entry.web_view_link.as_deref().unwrap_or(&entry.id)
                 );
             }
