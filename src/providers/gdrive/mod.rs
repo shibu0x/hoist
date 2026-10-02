@@ -1,8 +1,10 @@
+mod delete;
 mod download;
 mod folders;
 mod upload;
 
-pub use download::{download_file, resolve};
+pub use delete::{delete_forever, describe_contents, trash};
+pub use download::{download_file, resolve, resolve_all};
 pub use folders::{ensure_folder_path, list_folder, resolve_folder};
 pub use upload::{forget_sessions_for, upload_file};
 
@@ -25,7 +27,7 @@ pub struct DriveFile {
     pub web_view_link: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct DriveEntry {
     pub id: String,
     pub name: String,

@@ -30,34 +30,49 @@ pub async fn file_metadata(id: &str) -> Result<DriveEntry> {
 
 /// Accepts a Drive link, a bare file id, or a file name.
 
-pub async fn resolve(input: &str) -> Result<DriveEntry> {
+/// Every file matching a reference. A link or id yields exactly one; a name can
+/// yield several, because Drive allows duplicate names in one folder.
+pub async fn resolve_all(input: &str) -> Result<Vec<DriveEntry>> {
     if let Some(id) = id_from_link(input) {
-        return file_metadata(&id).await;
+        return Ok(vec![file_metadata(&id).await?]);
     }
     if looks_like_id(input) {
-        return file_metadata(input).await;
+        return Ok(vec![file_metadata(input).await?]);
     }
 
-    let mut matches: Vec<DriveEntry> = list_files(500)
+    let matches: Vec<DriveEntry> = list_files(500)
         .await?
         .into_iter()
         .filter(|entry| entry.name == input)
         .collect();
 
-    match matches.len() {
-        0 => anyhow::bail!("no file named {input:?} - run `transit list` to see what is there"),
-        1 => Ok(matches.remove(0)),
-        n => {
-            let links: Vec<String> = matches
-                .iter()
-                .map(|e| format!("  {} {}", e.modified_time.get(..16).unwrap_or(""), e.id))
-                .collect();
-            anyhow::bail!(
-                "{n} files named {input:?} - pass an id or link instead:\n{}",
-                links.join("\n")
-            )
-        }
+    anyhow::ensure!(
+        !matches.is_empty(),
+        "no file named {input:?} - run `transit list` to see what is there"
+    );
+
+    Ok(matches)
+}
+
+/// Exactly one match, or an error. Used where acting on the wrong file cannot
+/// be undone by the caller - a download writes to one path, so guessing between
+/// two files would silently produce the wrong contents.
+pub async fn resolve(input: &str) -> Result<DriveEntry> {
+    let mut matches = resolve_all(input).await?;
+
+    if matches.len() > 1 {
+        let listed: Vec<String> = matches
+            .iter()
+            .map(|e| format!("  {} {}", e.modified_time.get(..16).unwrap_or(""), e.id))
+            .collect();
+        anyhow::bail!(
+            "{} files named {input:?} - pass an id or link instead:\n{}",
+            matches.len(),
+            listed.join("\n")
+        );
     }
+
+    Ok(matches.remove(0))
 }
 
 fn id_from_link(input: &str) -> Option<String> {

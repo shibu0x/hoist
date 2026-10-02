@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use dialoguer::{Confirm, Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, MultiSelect, Select, theme::ColorfulTheme};
 use indicatif::HumanBytes;
 
 use crate::{
@@ -36,6 +36,16 @@ pub enum Commands {
     },
     /// Create a folder, including any missing parents
     Mkdir { path: String },
+    /// Move a file to Drive trash, or delete it outright
+    Delete {
+        target: String,
+        /// Delete immediately instead of trashing. Cannot be undone.
+        #[arg(long)]
+        permanent: bool,
+        /// Skip the confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
     /// Download a file by link, id, or name
     Download {
         target: String,
@@ -160,6 +170,12 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             println!("\n{} file(s) created by transit.", entries.len());
         }
 
+        Commands::Delete {
+            target,
+            permanent,
+            yes,
+        } => delete(&target, permanent, yes).await?,
+
         Commands::Download { target, out } => {
             let (_, account) = accounts::active_for("google")?;
             let entry = providers::gdrive::resolve(&target).await?;
@@ -170,6 +186,101 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             providers::gdrive::download_file(&entry, &dest).await?;
             println!("Saved to {}", dest.display());
         }
+    }
+
+    Ok(())
+}
+
+async fn delete(target: &str, permanent: bool, yes: bool) -> anyhow::Result<()> {
+    let (_, account) = accounts::active_for("google")?;
+    let matches = providers::gdrive::resolve_all(target).await?;
+
+    // Drive allows duplicate names in one folder, so a name can match several
+    // files. Picking one for the user is how the wrong file gets deleted.
+    let targets = if matches.len() == 1 {
+        matches
+    } else if yes {
+        anyhow::bail!(
+            "{} files named {target:?} - pass an id or link, or drop --yes to choose",
+            matches.len()
+        );
+    } else {
+        let labels: Vec<String> = matches
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{:>10}  {}  {}",
+                    entry
+                        .size_bytes()
+                        .map(|b| HumanBytes(b).to_string())
+                        .unwrap_or_else(|| "-".into()),
+                    entry.modified_time.get(..16).unwrap_or("").replace('T', " "),
+                    entry.id
+                )
+            })
+            .collect();
+
+        let picked = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!(
+                "{} files named {target:?} - space to select, enter to confirm",
+                matches.len()
+            ))
+            .items(&labels)
+            .interact()?;
+
+        picked.into_iter().map(|at| matches[at].clone()).collect()
+    };
+
+    if targets.is_empty() {
+        println!("Nothing selected.");
+        return Ok(());
+    }
+
+    // Deleting a folder takes its contents with it, so say how much that is
+    // before anyone agrees.
+    let mut described = Vec::new();
+    for entry in &targets {
+        let contents = providers::gdrive::describe_contents(entry).await?;
+        described.push(match (&contents, entry.size_bytes()) {
+            (Some(inside), _) => format!("folder {} ({inside})", entry.name),
+            (None, Some(bytes)) => format!("{} ({})", entry.name, HumanBytes(bytes)),
+            (None, None) => entry.name.clone(),
+        });
+    }
+
+    let verb = if permanent {
+        "PERMANENTLY delete"
+    } else {
+        "Move to Drive trash:"
+    };
+    let prompt = if described.len() == 1 {
+        format!("{verb} {}", described[0])
+    } else {
+        format!("{verb}\n  {}\nAll {} items", described.join("\n  "), described.len())
+    };
+
+    if !yes
+        && !Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(false)
+            .interact()?
+    {
+        println!("Cancelled.");
+        return Ok(());
+    }
+
+    for entry in &targets {
+        if permanent {
+            providers::gdrive::delete_forever(&entry.id).await?;
+            println!("Deleted {} from {}", entry.name, account.email);
+        } else {
+            providers::gdrive::trash(&entry.id).await?;
+            println!("Moved {} to trash", entry.name);
+        }
+    }
+
+    if !permanent {
+        println!("Restore within 30 days at https://drive.google.com/drive/trash");
     }
 
     Ok(())

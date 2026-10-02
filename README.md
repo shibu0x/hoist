@@ -30,12 +30,36 @@ transit account add     # paste your Client ID + Secret, then approve in the bro
 transit upload ./report.pdf          # upload a file
 transit upload                       # browse and search for one instead
 transit list                         # what is at the top level?
+transit delete report.pdf            # move to Drive trash
 transit download report.pdf          # by name
 transit download 'https://drive.google.com/file/d/1AbC.../view'
 transit download 1AbC... --out ~/Downloads/report.pdf
 ```
 
 Quote Drive links in zsh — the `?` in them is a glob character.
+
+### Deleting
+
+```sh
+transit delete report.pdf              # move to Drive trash, recoverable 30 days
+transit delete reports/old --permanent # gone for good
+transit delete report.pdf -y           # skip the confirmation
+```
+
+Trashing is the default because it is reversible: Drive keeps a trashed file for
+about 30 days, and `list` hides trashed files, so the visible result is the same
+as a deletion with a way back. `--permanent` skips the trash entirely and cannot
+be undone.
+
+Deleting a folder takes everything inside it. The prompt says how many items
+that is before you agree:
+
+```
+? Move folder reports/ (3 items inside) to Drive trash? (y/N)
+```
+
+A name matching more than one file is refused rather than guessed - pass an id
+or a link instead.
 
 ### Folders
 
@@ -226,6 +250,5 @@ rm -rf ~/.config/transit          # everything, including the OAuth client
 
 ## Not yet supported
 
-Deleting remote files, uploading a whole directory at once, Google Docs export,
-headless auth (the browser flow needs a display), and providers other than
-Google Drive.
+Uploading a whole directory at once, Google Docs export, headless auth (the
+browser flow needs a display), and providers other than Google Drive.
