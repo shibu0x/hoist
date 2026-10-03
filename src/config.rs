@@ -26,6 +26,9 @@ pub enum Commands {
         /// Destination folder path, created if missing (like mkdir -p)
         #[arg(long)]
         folder: Option<String>,
+        /// Overwrite a file of the same name instead of creating a duplicate
+        #[arg(long)]
+        replace: bool,
     },
     /// List a folder's contents. Defaults to the top level.
     List {
@@ -75,7 +78,11 @@ pub enum ClientAction {
 }
 
 pub async fn config(cli: Cli) -> anyhow::Result<()> {
-    match cli.command {
+    let Some(command) = cli.command else {
+        return crate::menu::run().await;
+    };
+
+    match command {
         Commands::Account { action } => account(action).await?,
         Commands::Client { action } => match action {
             ClientAction::Set => {
@@ -90,7 +97,11 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             println!("Folder {path} ready on {}", account.email);
         }
 
-        Commands::Upload { path, folder } => {
+        Commands::Upload {
+            path,
+            folder,
+            replace,
+        } => {
             let (_, account) = accounts::active_for("google")?;
 
             let path = match path {
@@ -117,7 +128,7 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
                 account.email,
                 folder.map(|f| format!(" ({f})")).unwrap_or_default()
             );
-            let file = providers::gdrive::upload_file(&path, parent.as_deref()).await?;
+            let file = providers::gdrive::upload_file(&path, parent.as_deref(), replace).await?;
 
             println!("Uploaded successfully!");
             println!("Name: {}", file.name);
@@ -286,7 +297,7 @@ async fn delete(target: &str, permanent: bool, yes: bool) -> anyhow::Result<()> 
     Ok(())
 }
 
-async fn account(action: AccountAction) -> anyhow::Result<()> {
+pub(crate) async fn account(action: AccountAction) -> anyhow::Result<()> {
     match action {
         AccountAction::Add => gdrive_auth().await?,
 

@@ -26,9 +26,30 @@ transit account add     # paste your Client ID + Secret, then approve in the bro
 
 ## Usage
 
+Run `transit` with no arguments for an interactive menu — it walks you through
+uploading, browsing, downloading and deleting without needing to remember any
+commands:
+
+```
+? What do you want to do? ›
+❯ Upload a file
+  Browse files
+  Accounts
+  OAuth client
+  Exit
+```
+
+**Browse files** is also how you download and delete: navigate into folders,
+pick a file, then choose what to do with it. Deleting from the menu always
+trashes rather than permanently deleting — an interactive flow is where a
+mis-click happens, so only the recoverable option is offered there.
+
+Everything is available as a direct command too:
+
 ```sh
 transit upload ./report.pdf          # upload a file
 transit upload                       # browse and search for one instead
+transit upload ./report.pdf --replace # overwrite instead of duplicating
 transit list                         # what is at the top level?
 transit delete report.pdf            # move to Drive trash
 transit download report.pdf          # by name
@@ -37,6 +58,20 @@ transit download 1AbC... --out ~/Downloads/report.pdf
 ```
 
 Quote Drive links in zsh — the `?` in them is a glob character.
+
+### Replacing vs duplicating
+
+Drive allows two files with the same name in one folder, so a plain re-upload
+creates a duplicate. `--replace` updates the existing file's contents instead:
+
+```sh
+transit upload ./report.pdf --replace               # top level
+transit upload ./q1.pdf --folder reports/q1 --replace
+```
+
+The file keeps its id, so links you have already shared stay valid rather than
+pointing at an older copy. If duplicates of that name already exist, the most
+recently modified one is replaced and its id is printed.
 
 ### Deleting
 

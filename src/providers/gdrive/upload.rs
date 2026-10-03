@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use super::{DriveFile, ROOT};
+use super::{DriveFile, FOLDER_MIME, ROOT, escape_query, query_files};
 use crate::auth::get_google_access_token;
 use crate::auth::token_store::{config_file, load_from, save_to};
 
@@ -21,7 +21,25 @@ const SESSIONS_FILE: &str = "uploads.json";
 const CHUNK: u64 = 8 * 1024 * 1024;
 const MAX_RETRIES: u32 = 5;
 
-pub async fn upload_file(path: &Path, parent: Option<&str>) -> Result<DriveFile> {
+/// The most recently modified non-folder with this name in `parent`, if any.
+/// Newest wins when duplicates already exist: refusing would make `--replace`
+/// useless in exactly the situation it is meant to clean up.
+async fn find_file(name: &str, parent: &str) -> Result<Option<String>> {
+    let found = query_files(
+        &format!(
+            "name = '{}' and '{}' in parents and mimeType != '{FOLDER_MIME}' and trashed = false",
+            escape_query(name),
+            escape_query(parent)
+        ),
+        "modifiedTime desc",
+        1,
+    )
+    .await?;
+
+    Ok(found.into_iter().next().map(|entry| entry.id))
+}
+
+pub async fn upload_file(path: &Path, parent: Option<&str>, replace: bool) -> Result<DriveFile> {
     let access_token = get_google_access_token().await?;
 
     let file_name = path
@@ -38,7 +56,27 @@ pub async fn upload_file(path: &Path, parent: Option<&str>) -> Result<DriveFile>
         .build()?;
 
     let (account_id, _) = crate::auth::accounts::active_for("google")?;
-    let key = session_key(&account_id, parent.unwrap_or(ROOT), path, &meta)?;
+    // Replacing keeps the file's id, so links already shared stay valid instead
+    // of pointing at an older copy.
+    let replacing = if replace {
+        let existing = find_file(file_name, parent.unwrap_or(ROOT)).await?;
+        if let Some(id) = &existing {
+            println!("Replacing contents of {id}");
+        }
+        existing
+    } else {
+        None
+    };
+
+    // A create session and an update session are not interchangeable, so they
+    // must not share a resume key.
+    let key = session_key(
+        &account_id,
+        parent.unwrap_or(ROOT),
+        replacing.as_deref().unwrap_or("new"),
+        path,
+        &meta,
+    )?;
 
     let (session_uri, mut offset) = match saved_session(&key)? {
         Some(uri) => match server_offset(&client, &uri, total).await {
@@ -46,10 +84,10 @@ pub async fn upload_file(path: &Path, parent: Option<&str>) -> Result<DriveFile>
                 println!("Resuming at {}%", at * 100 / total.max(1));
                 (uri, at)
             }
-            Ok(None) => (start_session(&client, &access_token, file_name, total, parent).await?, 0),
-            Err(_) => (start_session(&client, &access_token, file_name, total, parent).await?, 0),
+            Ok(None) => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
+            Err(_) => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
         },
-        None => (start_session(&client, &access_token, file_name, total, parent).await?, 0),
+        None => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
     };
     remember_session(&key, &session_uri)?;
 
@@ -148,14 +186,27 @@ async fn start_session(
     file_name: &str,
     total: u64,
     parent: Option<&str>,
+    replacing: Option<&str>,
 ) -> Result<String> {
     let mut metadata = serde_json::json!({ "name": file_name });
-    if let Some(parent) = parent {
-        metadata["parents"] = serde_json::json!([parent]);
-    }
 
-    let response = client
-        .post("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink")
+    let request = match replacing {
+        // Updating an existing file: PATCH its id, and omit `parents` - Drive
+        // rejects it here, moving a file needs addParents instead.
+        Some(id) => client.patch(format!(
+            "https://www.googleapis.com/upload/drive/v3/files/{id}?uploadType=resumable&fields=id,name,webViewLink"
+        )),
+        None => {
+            if let Some(parent) = parent {
+                metadata["parents"] = serde_json::json!([parent]);
+            }
+            client.post(
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink",
+            )
+        }
+    };
+
+    let response = request
         .bearer_auth(access_token)
         .header(CONTENT_TYPE, "application/json; charset=UTF-8")
         .header("X-Upload-Content-Type", "application/octet-stream")
@@ -204,6 +255,7 @@ fn acknowledged(range: Option<&reqwest::header::HeaderValue>) -> u64 {
 fn session_key(
     account_id: &str,
     parent: &str,
+    target: &str,
     path: &Path,
     meta: &std::fs::Metadata,
 ) -> Result<String> {
@@ -212,7 +264,7 @@ fn session_key(
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
     Ok(format!(
-        "{account_id}|{parent}|{}:{}:{}",
+        "{account_id}|{parent}|{target}|{}:{}:{}",
         path.canonicalize()?.display(),
         meta.len(),
         modified

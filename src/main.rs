@@ -1,6 +1,7 @@
 use clap::Parser;
 
 mod config;
+mod menu;
 mod picker;
 mod providers;
 mod auth;
@@ -10,7 +11,8 @@ mod auth;
 #[command(about = "A cli tool to upload any data to any kind of storage from terminal")]
 pub struct Cli {
     #[command(subcommand)]
-    command: config::Commands
+    /// Omit for an interactive menu
+    command: Option<config::Commands>,
 }
 
 #[tokio::main]
