@@ -1,6 +1,10 @@
 # hoist
 
-Upload and download files to google drive from the terminal.
+[![crates.io](https://img.shields.io/crates/v/hoist-cli.svg)](https://crates.io/crates/hoist-cli)
+[![CI](https://github.com/shibu0x/hoist/actions/workflows/ci.yml/badge.svg)](https://github.com/shibu0x/hoist/actions/workflows/ci.yml)
+[![license](https://img.shields.io/crates/l/hoist-cli.svg)](LICENSE)
+
+Upload and download files to Google Drive from the terminal.
 
 - Resumable uploads and downloads — a dropped connection continues where it left off
 - Multiple accounts, switch between them
@@ -10,7 +14,26 @@ Upload and download files to google drive from the terminal.
 ## Install
 
 ```sh
-git clone <this repo> && cd hoist
+cargo install hoist-cli
+```
+
+The crate is `hoist-cli` because the bare name belongs to an unrelated crate;
+the command it installs is `hoist`.
+
+Prebuilt binaries for macOS and Linux are on the
+[releases page](https://github.com/shibu0x/hoist/releases). They are not
+code-signed, so macOS quarantines them on first run:
+
+```sh
+tar -xzf hoist-aarch64-apple-darwin.tar.gz
+xattr -d com.apple.quarantine ./hoist
+mv hoist /usr/local/bin/
+```
+
+From source:
+
+```sh
+git clone https://github.com/shibu0x/hoist && cd hoist
 cargo install --path .
 ```
 

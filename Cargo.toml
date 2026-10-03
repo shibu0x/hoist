@@ -1,10 +1,10 @@
 [package]
 name = "hoist-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Upload and download files to cloud storage from the terminal"
 license = "MIT"
-repository = "https://github.com/shivendram16053/hoist"
+repository = "https://github.com/shibu0x/hoist"
 keywords = ["cli", "google-drive", "upload", "cloud-storage"]
 categories = ["command-line-utilities"]
 
