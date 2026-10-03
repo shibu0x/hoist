@@ -1,0 +1,72 @@
+name: Release
+
+# Tag-driven: `git tag v0.1.0 && git push --tags` builds the binaries and
+# attaches them to a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Linux keyring deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # Tarball rather than a bare binary: it preserves the executable bit,
+      # which a raw GitHub download does not.
+      - name: Package
+        run: |
+          tar -czf hoist-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release hoist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hoist-${{ matrix.target }}
+          path: hoist-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true
+          body: |
+            Binaries are not code-signed, so macOS and Windows will warn on
+            first run. On macOS: `xattr -d com.apple.quarantine ./hoist`.
+
+            Setup instructions are in the README — you need your own Google
+            OAuth client before the first upload.

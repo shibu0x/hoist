@@ -8,12 +8,12 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SERVICE: &str = "transit";
+const SERVICE: &str = "hoist";
 
 const EXPIRY_SKEW_SECS: u64 = 60;
 
 fn env_var(provider: &str) -> String {
-    format!("TRANSIT_{}_REFRESH_TOKEN", provider.to_uppercase())
+    format!("HOIST_{}_REFRESH_TOKEN", provider.to_uppercase())
 }
 
 pub fn keyring_entry(provider: &str) -> keyring::Result<Entry> {
@@ -63,12 +63,12 @@ pub fn get_refresh_token(provider: &str) -> Result<String> {
 
     load_from::<HashMap<String, String>>(&tokens_path()?)?
         .remove(provider)
-        .with_context(|| format!("not connected to {provider} - run `transit account add` first"))
+        .with_context(|| format!("not connected to {provider} - run `hoist account add` first"))
 }
 
 pub(crate) fn config_file(name: &str) -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME is not set")?;
-    Ok(PathBuf::from(home).join(".config/transit").join(name))
+    Ok(PathBuf::from(home).join(".config/hoist").join(name))
 }
 
 fn tokens_path() -> Result<PathBuf> {

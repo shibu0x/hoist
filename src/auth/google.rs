@@ -40,7 +40,10 @@ pub async fn gdrive_auth() -> anyhow::Result<()> {
     println!("Starting gdrive authentication");
 
     let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let redirect_uri = format!("http://127.0.0.1:{}/callback", listener.local_addr()?.port());
+    let redirect_uri = format!(
+        "http://127.0.0.1:{}/callback",
+        listener.local_addr()?.port()
+    );
 
     let state = random_urlsafe()?;
     let verifier = random_urlsafe()?;
@@ -132,14 +135,16 @@ async fn wait_for_callback(listener: TcpListener, expected_state: &str) -> anyho
     let state_ok = param("state").as_deref() == Some(expected_state);
 
     let response = if state_ok {
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nTransit authorization successful. You can close this window."
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nHoist authorization successful. You can close this window."
     } else {
-        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nTransit rejected this callback: state mismatch."
+        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nHoist rejected this callback: state mismatch."
     };
     socket.write_all(response.as_bytes()).await?;
 
     if !state_ok {
-        anyhow::bail!("OAuth state mismatch - callback did not come from the request transit started");
+        anyhow::bail!(
+            "OAuth state mismatch - callback did not come from the request hoist started"
+        );
     }
 
     if let Some(error) = param("error") {
@@ -160,20 +165,13 @@ async fn exchange_code(
     let params = [
         ("code", code),
         ("client_id", oauth.client_id.as_str()),
-        (
-            "client_secret",
-            oauth.client_secret.as_str(),
-        ),
+        ("client_secret", oauth.client_secret.as_str()),
         ("redirect_uri", redirect_uri),
         ("grant_type", "authorization_code"),
         ("code_verifier", code_verifier),
     ];
 
-    let response = client
-        .post(TOKEN_URI)
-        .form(&params)
-        .send()
-        .await?;
+    let response = client.post(TOKEN_URI).form(&params).send().await?;
 
     let tokens = response.error_for_status()?.json::<TokenResponse>().await?;
 
@@ -188,19 +186,12 @@ async fn refresh_access_token(
 
     let params = [
         ("client_id", oauth.client_id.as_str()),
-        (
-            "client_secret",
-            oauth.client_secret.as_str(),
-        ),
+        ("client_secret", oauth.client_secret.as_str()),
         ("refresh_token", refresh_token),
         ("grant_type", "refresh_token"),
     ];
 
-    let response = client
-        .post(TOKEN_URI)
-        .form(&params)
-        .send()
-        .await?;
+    let response = client.post(TOKEN_URI).form(&params).send().await?;
 
     let status = response.status();
     let body = response.text().await?;
@@ -234,8 +225,9 @@ pub async fn get_google_access_token() -> anyhow::Result<String> {
         return Ok(access_token);
     }
 
-    let oauth = super::credentials::get("google")?
-        .ok_or_else(|| anyhow::anyhow!("not connected to google - run `transit account add` first"))?;
+    let oauth = super::credentials::get("google")?.ok_or_else(|| {
+        anyhow::anyhow!("not connected to google - run `hoist account add` first")
+    })?;
 
     let refresh_token = crate::auth::token_store::get_refresh_token(&id)?;
 

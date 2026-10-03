@@ -30,9 +30,7 @@ pub async fn delete_forever(id: &str) -> Result<()> {
         .await?;
 
     if response.status() == StatusCode::FORBIDDEN {
-        anyhow::bail!(
-            "not allowed to delete {id} - transit can only delete files it created"
-        );
+        anyhow::bail!("not allowed to delete {id} - hoist can only delete files it created");
     }
 
     response.error_for_status()?;

@@ -84,10 +84,43 @@ pub async fn upload_file(path: &Path, parent: Option<&str>, replace: bool) -> Re
                 println!("Resuming at {}%", at * 100 / total.max(1));
                 (uri, at)
             }
-            Ok(None) => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
-            Err(_) => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
+            Ok(None) => (
+                start_session(
+                    &client,
+                    &access_token,
+                    file_name,
+                    total,
+                    parent,
+                    replacing.as_deref(),
+                )
+                .await?,
+                0,
+            ),
+            Err(_) => (
+                start_session(
+                    &client,
+                    &access_token,
+                    file_name,
+                    total,
+                    parent,
+                    replacing.as_deref(),
+                )
+                .await?,
+                0,
+            ),
         },
-        None => (start_session(&client, &access_token, file_name, total, parent, replacing.as_deref()).await?, 0),
+        None => (
+            start_session(
+                &client,
+                &access_token,
+                file_name,
+                total,
+                parent,
+                replacing.as_deref(),
+            )
+            .await?,
+            0,
+        ),
     };
     remember_session(&key, &session_uri)?;
 
@@ -115,7 +148,10 @@ pub async fn upload_file(path: &Path, parent: Option<&str>, replace: bool) -> Re
             // closes the session.
             request
         } else {
-            request.header(CONTENT_RANGE, format!("bytes {}-{}/{}", offset, end - 1, total))
+            request.header(
+                CONTENT_RANGE,
+                format!("bytes {}-{}/{}", offset, end - 1, total),
+            )
         };
 
         match request.body(body).send().await {
@@ -132,7 +168,7 @@ pub async fn upload_file(path: &Path, parent: Option<&str>, replace: bool) -> Re
                     forget_session(&key)?;
                     return Ok(file);
                 }
-                
+
                 StatusCode::NOT_FOUND | StatusCode::GONE => {
                     progress.abandon();
                     forget_session(&key)?;
@@ -148,7 +184,7 @@ pub async fn upload_file(path: &Path, parent: Option<&str>, replace: bool) -> Re
                     anyhow::bail!("upload failed with {status}: {body}");
                 }
             },
-            
+
             Err(_) => {
                 offset = retry(&client, &session_uri, total, &mut attempt, offset).await?;
                 progress.set_position(offset);
@@ -319,9 +355,17 @@ mod tests {
         let single = HeaderValue::from_static("bytes=0-0");
         assert_eq!(acknowledged(Some(&single)), 1, "one stored byte");
 
-        assert_eq!(acknowledged(None), 0, "no Range header means server has nothing");
+        assert_eq!(
+            acknowledged(None),
+            0,
+            "no Range header means server has nothing"
+        );
 
         let junk = HeaderValue::from_static("bytes=garbage");
-        assert_eq!(acknowledged(Some(&junk)), 0, "unparseable falls back to restart");
+        assert_eq!(
+            acknowledged(Some(&junk)),
+            0,
+            "unparseable falls back to restart"
+        );
     }
 }

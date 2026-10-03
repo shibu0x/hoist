@@ -1,13 +1,13 @@
 use clap::Parser;
 
+mod auth;
 mod config;
 mod menu;
 mod picker;
 mod providers;
-mod auth;
 
 #[derive(Parser)]
-#[command(name = "transit")]
+#[command(name = "hoist")]
 #[command(about = "A cli tool to upload any data to any kind of storage from terminal")]
 pub struct Cli {
     #[command(subcommand)]
@@ -16,9 +16,9 @@ pub struct Cli {
 }
 
 #[tokio::main]
-pub async fn main() -> anyhow::Result<()>{
+pub async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let _ = config::config(cli).await?;
+    config::config(cli).await?;
 
     Ok(())
 }

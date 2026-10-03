@@ -73,7 +73,10 @@ pub async fn list_files(limit: usize) -> Result<Vec<DriveEntry>> {
         }
 
         let mut query = vec![
-            ("fields", "nextPageToken,files(id,name,size,mimeType,modifiedTime,webViewLink)".to_string()),
+            (
+                "fields",
+                "nextPageToken,files(id,name,size,mimeType,modifiedTime,webViewLink)".to_string(),
+            ),
             ("orderBy", "modifiedTime desc".to_string()),
             ("q", "trashed = false".to_string()),
             ("pageSize", remaining.min(100).to_string()),

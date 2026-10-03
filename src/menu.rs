@@ -9,7 +9,7 @@ use crate::providers::gdrive::{self, DriveEntry, ROOT};
 pub async fn run() -> Result<()> {
     if !std::io::stdin().is_terminal() {
         anyhow::bail!(
-            "the interactive menu needs a terminal - run `transit --help` for the commands"
+            "the interactive menu needs a terminal - run `hoist --help` for the commands"
         );
     }
 
@@ -23,7 +23,7 @@ pub async fn run() -> Result<()> {
         let choice = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("What do you want to do?")
             .default(0)
-            .items(&[
+            .items([
                 "Upload a file",
                 "Browse files",
                 "Accounts",
@@ -143,7 +143,7 @@ async fn file_actions(entry: &DriveEntry) -> Result<()> {
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(&entry.name)
         .default(0)
-        .items(&["Download", "Copy link", "Delete", "Back"])
+        .items(["Download", "Copy link", "Delete", "Back"])
         .interact()?;
 
     match choice {
@@ -156,19 +156,14 @@ async fn file_actions(entry: &DriveEntry) -> Result<()> {
             gdrive::download_file(entry, &dest).await?;
             println!("Saved to {}", dest.display());
         }
-        1 => println!(
-            "{}",
-            entry.web_view_link.as_deref().unwrap_or(&entry.id)
-        ),
-        2 => {
-            if Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("Move {} to Drive trash?", entry.name))
-                .default(false)
-                .interact()?
-            {
-                gdrive::trash(&entry.id).await?;
-                println!("Moved {} to trash", entry.name);
-            }
+        1 => println!("{}", entry.web_view_link.as_deref().unwrap_or(&entry.id)),
+        2 if Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!("Move {} to Drive trash?", entry.name))
+            .default(false)
+            .interact()? =>
+        {
+            gdrive::trash(&entry.id).await?;
+            println!("Moved {} to trash", entry.name);
         }
         _ => {}
     }
@@ -182,7 +177,7 @@ async fn accounts_menu() -> Result<()> {
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Accounts")
         .default(0)
-        .items(&["List", "Add", "Switch", "Remove", "Back"])
+        .items(["List", "Add", "Switch", "Remove", "Back"])
         .interact()?;
 
     match choice {
@@ -198,7 +193,7 @@ fn client_menu() -> Result<()> {
     let choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("OAuth client")
         .default(0)
-        .items(&["Show", "Set or replace", "Back"])
+        .items(["Show", "Set or replace", "Back"])
         .interact()?;
 
     match choice {

@@ -1,7 +1,16 @@
 [package]
-name = "transit"
+name = "hoist-cli"
 version = "0.1.0"
 edition = "2024"
+description = "Upload and download files to cloud storage from the terminal"
+license = "MIT"
+repository = "https://github.com/shivendram16053/hoist"
+keywords = ["cli", "google-drive", "upload", "cloud-storage"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "hoist"
+path = "src/main.rs"
 
 [dependencies]
 anyhow ="1.0.104"

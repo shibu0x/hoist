@@ -1,4 +1,4 @@
-# transit
+# hoist
 
 Upload and download files to google drive from the terminal.
 
@@ -10,23 +10,23 @@ Upload and download files to google drive from the terminal.
 ## Install
 
 ```sh
-git clone <this repo> && cd transit
+git clone <this repo> && cd hoist
 cargo install --path .
 ```
 
 ## Setup
 
-transit uses **your own** Google OAuth client rather than a shared built-in one:
+hoist uses **your own** Google OAuth client rather than a shared built-in one:
 your own API quota, your own consent screen, no third party in the middle. It's
 a one-time setup — see [Getting Google credentials](#getting-google-credentials).
 
 ```sh
-transit account add     # paste your Client ID + Secret, then approve in the browser
+hoist account add     # paste your Client ID + Secret, then approve in the browser
 ```
 
 ## Usage
 
-Run `transit` with no arguments for an interactive menu — it walks you through
+Run `hoist` with no arguments for an interactive menu — it walks you through
 uploading, browsing, downloading and deleting without needing to remember any
 commands:
 
@@ -47,14 +47,14 @@ mis-click happens, so only the recoverable option is offered there.
 Everything is available as a direct command too:
 
 ```sh
-transit upload ./report.pdf          # upload a file
-transit upload                       # browse and search for one instead
-transit upload ./report.pdf --replace # overwrite instead of duplicating
-transit list                         # what is at the top level?
-transit delete report.pdf            # move to Drive trash
-transit download report.pdf          # by name
-transit download 'https://drive.google.com/file/d/1AbC.../view'
-transit download 1AbC... --out ~/Downloads/report.pdf
+hoist upload ./report.pdf          # upload a file
+hoist upload                       # browse and search for one instead
+hoist upload ./report.pdf --replace # overwrite instead of duplicating
+hoist list                         # what is at the top level?
+hoist delete report.pdf            # move to Drive trash
+hoist download report.pdf          # by name
+hoist download 'https://drive.google.com/file/d/1AbC.../view'
+hoist download 1AbC... --out ~/Downloads/report.pdf
 ```
 
 Quote Drive links in zsh — the `?` in them is a glob character.
@@ -65,8 +65,8 @@ Drive allows two files with the same name in one folder, so a plain re-upload
 creates a duplicate. `--replace` updates the existing file's contents instead:
 
 ```sh
-transit upload ./report.pdf --replace               # top level
-transit upload ./q1.pdf --folder reports/q1 --replace
+hoist upload ./report.pdf --replace               # top level
+hoist upload ./q1.pdf --folder reports/q1 --replace
 ```
 
 The file keeps its id, so links you have already shared stay valid rather than
@@ -76,9 +76,9 @@ recently modified one is replaced and its id is printed.
 ### Deleting
 
 ```sh
-transit delete report.pdf              # move to Drive trash, recoverable 30 days
-transit delete reports/old --permanent # gone for good
-transit delete report.pdf -y           # skip the confirmation
+hoist delete report.pdf              # move to Drive trash, recoverable 30 days
+hoist delete reports/old --permanent # gone for good
+hoist delete report.pdf -y           # skip the confirmation
 ```
 
 Trashing is the default because it is reversible: Drive keeps a trashed file for
@@ -99,10 +99,10 @@ or a link instead.
 ### Folders
 
 ```sh
-transit mkdir reports/2026/q1                      # creates every missing level
-transit upload ./q1.pdf --folder reports/2026/q1   # creates the folder if needed
-transit list reports/2026                          # folders first, trailing /
-transit list reports/2026/q1 --limit 100
+hoist mkdir reports/2026/q1                      # creates every missing level
+hoist upload ./q1.pdf --folder reports/2026/q1   # creates the folder if needed
+hoist list reports/2026                          # folders first, trailing /
+hoist list reports/2026/q1 --limit 100
 ```
 
 `--folder` and `mkdir` both behave like `mkdir -p`: a path is walked segment by
@@ -114,23 +114,23 @@ Paths are relative to the top level of the account's Drive. `list` with no
 argument shows the top level; pass a folder path or id to descend. Folders have
 no size and show as `-`.
 
-A note on `drive.file` scope: the only folders transit can see are the ones it
-created, so this tree is transit's own, not your whole Drive.
+A note on `drive.file` scope: the only folders hoist can see are the ones it
+created, so this tree is hoist's own, not your whole Drive.
 
 ### Accounts
 
 ```sh
-transit account add        # authorise another account
-transit account list       # connected accounts, * marks active
-transit account switch     # choose which account commands act on
-transit account remove     # revoke access and delete stored credentials
+hoist account add        # authorise another account
+hoist account list       # connected accounts, * marks active
+hoist account switch     # choose which account commands act on
+hoist account remove     # revoke access and delete stored credentials
 ```
 
 ### OAuth client
 
 ```sh
-transit client show        # which client is configured, and where it came from
-transit client set         # enter or replace the client ID and secret
+hoist client show        # which client is configured, and where it came from
+hoist client set         # enter or replace the client ID and secret
 ```
 
 An **account** is a Google user whose Drive you're reading and writing. The
@@ -140,7 +140,7 @@ re-entering it.
 
 ### Interactive picker
 
-`transit upload` with no path opens a browser for your local filesystem:
+`hoist upload` with no path opens a browser for your local filesystem:
 
 ```
 ? /Users/you/Developer ›
@@ -162,8 +162,8 @@ Uploads go up in 8 MiB chunks against a Drive resumable session, and the
 session URI is saved, so an interrupted transfer resumes rather than restarting:
 
 ```sh
-transit upload big.zip     # Ctrl-C at 50%
-transit upload big.zip     # Resuming at 50%
+hoist upload big.zip     # Ctrl-C at 50%
+hoist upload big.zip     # Resuming at 50%
 ```
 
 The resume offset comes from Drive, not from a local byte count — after a
@@ -203,7 +203,7 @@ OAuth client. Roughly ten minutes, once.
 14. Go back to **OAuth consent screen** and click **Publish app**, then
     **Confirm**.
 
-Then run `transit account add` and paste the two values when prompted.
+Then run `hoist account add` and paste the two values when prompted.
 
 ### Step 14 is not optional
 
@@ -214,17 +214,17 @@ not put you through Google's verification review.
 
 ### Why `drive.file` and not full Drive access
 
-`drive.file` grants access only to files transit creates. It cannot read the
-rest of your Drive, and `transit list` only ever shows files this tool
+`drive.file` grants access only to files hoist creates. It cannot read the
+rest of your Drive, and `hoist list` only ever shows files this tool
 uploaded. If you revoke access, everything else is untouched.
 
 The tradeoff: you cannot browse or download files you created elsewhere. A Doc
-you made in the browser is invisible to transit and `download` will return a
+you made in the browser is invisible to hoist and `download` will return a
 404. Changing that needs the full `drive` scope and fresh consent.
 
 ## Where things are stored
 
-Everything lives in `~/.config/transit/` (`0700`), each file a map keyed by
+Everything lives in `~/.config/hoist/` (`0700`), each file a map keyed by
 provider or account — so adding a provider adds entries, not files.
 
 | What | Where | Keyed by |
@@ -243,20 +243,20 @@ to `tokens.json` at `0600`.
 
 ### Overrides
 
-Every override follows `TRANSIT_<PROVIDER>_<THING>`, checked before anything on
+Every override follows `HOIST_<PROVIDER>_<THING>`, checked before anything on
 disk.
 
 | Variable | Effect |
 |---|---|
-| `TRANSIT_GOOGLE_CLIENT_ID` + `TRANSIT_GOOGLE_CLIENT_SECRET` | use this OAuth client (both required) |
-| `TRANSIT_GOOGLE_REFRESH_TOKEN` | use this refresh token, skip the keyring entirely |
+| `HOIST_GOOGLE_CLIENT_ID` + `HOIST_GOOGLE_CLIENT_SECRET` | use this OAuth client (both required) |
+| `HOIST_GOOGLE_REFRESH_TOKEN` | use this refresh token, skip the keyring entirely |
 
 The refresh-token override is the development escape hatch: every `cargo build`
 relinks the binary with a new code signature, and macOS ties a Keychain item's
 ACL to the calling binary — so "Always Allow" stops applying after a rebuild.
 
 ```sh
-export TRANSIT_GOOGLE_REFRESH_TOKEN=$(security find-generic-password -s transit -a google:you@gmail.com -w)
+export HOIST_GOOGLE_REFRESH_TOKEN=$(security find-generic-password -s hoist -a google:you@gmail.com -w)
 ```
 
 `$(...)` keeps the token out of your shell history, and `/usr/bin/security` is
@@ -272,15 +272,15 @@ a stable binary, so granting *it* Keychain access sticks.
   locally — the token is the only thing that can authorise its own revocation.
 - Tokens are never printed, logged, or included in error output.
 
-Anyone who can read `~/.config/transit/` as your user can act as you on files
+Anyone who can read `~/.config/hoist/` as your user can act as you on files
 this tool created. Revoke any time at
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
 ## Resetting
 
 ```sh
-transit account remove            # one account, revoked and cleaned up
-rm -rf ~/.config/transit          # everything, including the OAuth client
+hoist account remove            # one account, revoked and cleaned up
+rm -rf ~/.config/hoist          # everything, including the OAuth client
 ```
 
 ## Not yet supported

@@ -1046,6 +1046,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hoist-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "clap",
+ "dialoguer",
+ "futures-util",
+ "indicatif",
+ "keyring",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tokio-util",
+ "url",
+ "urlencoding",
+ "webbrowser",
+]
+
+[[package]]
 name = "http"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2661,28 +2683,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "transit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "clap",
- "dialoguer",
- "futures-util",
- "indicatif",
- "keyring",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
- "tokio-util",
- "url",
- "urlencoding",
- "webbrowser",
 ]
 
 [[package]]

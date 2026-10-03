@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-
 use super::token_store::{config_file, load_from, save_to};
 
 const FILE: &str = "accounts.json";
@@ -59,18 +58,16 @@ pub fn active_for(provider: &str) -> Result<(String, Account)> {
     let accounts = list()?;
     // Two different problems with two different fixes, so say which.
     let Some(id) = accounts.active.clone() else {
-        anyhow::bail!(
-            if accounts.known.is_empty() {
-                "no account connected - run `transit account add`"
-            } else {
-                "no account selected - run `transit account switch`"
-            }
-        );
+        anyhow::bail!(if accounts.known.is_empty() {
+            "no account connected - run `hoist account add`"
+        } else {
+            "no account selected - run `hoist account switch`"
+        });
     };
     let account = accounts
         .known
         .get(&id)
-        .with_context(|| format!("active account {id} is missing - run `transit account switch`"))?;
+        .with_context(|| format!("active account {id} is missing - run `hoist account switch`"))?;
 
     anyhow::ensure!(
         account.provider == provider,

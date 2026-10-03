@@ -20,7 +20,7 @@ pub async fn file_metadata(id: &str) -> Result<DriveEntry> {
 
     if response.status() == StatusCode::NOT_FOUND {
         anyhow::bail!(
-            "no file with id {id} - it may not exist, or was not created by transit \
+            "no file with id {id} - it may not exist, or was not created by hoist \
              (the drive.file scope cannot see the rest of your Drive)"
         );
     }
@@ -28,9 +28,7 @@ pub async fn file_metadata(id: &str) -> Result<DriveEntry> {
     Ok(response.error_for_status()?.json::<DriveEntry>().await?)
 }
 
-/// Accepts a Drive link, a bare file id, or a file name.
-
-/// Every file matching a reference. A link or id yields exactly one; a name can
+/// Every file matching a reference. Accepts a Drive link, a bare id, or a name. A link or id yields exactly one; a name can
 /// yield several, because Drive allows duplicate names in one folder.
 pub async fn resolve_all(input: &str) -> Result<Vec<DriveEntry>> {
     if let Some(id) = id_from_link(input) {
@@ -48,7 +46,7 @@ pub async fn resolve_all(input: &str) -> Result<Vec<DriveEntry>> {
 
     anyhow::ensure!(
         !matches.is_empty(),
-        "no file named {input:?} - run `transit list` to see what is there"
+        "no file named {input:?} - run `hoist list` to see what is there"
     );
 
     Ok(matches)
@@ -98,7 +96,10 @@ pub async fn download_file(entry: &DriveEntry, dest: &Path) -> Result<()> {
     let access_token = get_google_access_token().await?;
     let total = entry.size_bytes();
 
-    let have = tokio::fs::metadata(dest).await.map(|m| m.len()).unwrap_or(0);
+    let have = tokio::fs::metadata(dest)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
     if Some(have) == total && have > 0 {
         println!("Already downloaded: {}", dest.display());
         return Ok(());
@@ -120,10 +121,7 @@ pub async fn download_file(entry: &DriveEntry, dest: &Path) -> Result<()> {
     if have > 0 && !resuming {
         println!("Server sent the whole file; restarting the download.");
     } else if resuming {
-        println!(
-            "Resuming from {}",
-            indicatif::HumanBytes(have)
-        );
+        println!("Resuming from {}", indicatif::HumanBytes(have));
     }
 
     let file = tokio::fs::OpenOptions::new()
@@ -143,9 +141,7 @@ pub async fn download_file(entry: &DriveEntry, dest: &Path) -> Result<()> {
     );
     progress.set_position(start);
 
-    let stream = response
-        .bytes_stream()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+    let stream = response.bytes_stream().map_err(std::io::Error::other);
     let mut reader = progress.wrap_async_read(tokio_util::io::StreamReader::new(stream));
     let mut writer = file;
     tokio::io::copy(&mut reader, &mut writer).await?;

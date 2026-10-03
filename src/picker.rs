@@ -15,9 +15,7 @@ enum Row {
 }
 
 pub fn pick_file(start: &Path) -> Result<Option<PathBuf>> {
-    let mut current = start
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("."));
+    let mut current = start.canonicalize().unwrap_or_else(|_| PathBuf::from("."));
 
     loop {
         let (mut rows, mut labels) = (Vec::new(), Vec::new());
@@ -35,7 +33,7 @@ pub fn pick_file(start: &Path) -> Result<Option<PathBuf>> {
             rows.push(row);
             labels.push(label);
         }
-        
+
         let Some(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
             .with_prompt(current.display().to_string())
             .default(0)
@@ -85,8 +83,8 @@ fn read_dir_sorted(dir: &Path) -> Vec<(Row, String)> {
         }
     }
 
-    dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    dirs.sort_by_key(|a| a.0.to_lowercase());
+    files.sort_by_key(|a| a.0.to_lowercase());
 
     dirs.into_iter()
         .chain(files)

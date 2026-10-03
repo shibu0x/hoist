@@ -155,8 +155,8 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
             println!("{location} - {}\n", account.email);
 
             println!(
-                "{:<32} {:>10}  {:<16}  {:<24}  {}",
-                "NAME", "SIZE", "MODIFIED", "TYPE", "LINK"
+                "{:<32} {:>10}  {:<16}  {:<24}  LINK",
+                "NAME", "SIZE", "MODIFIED", "TYPE"
             );
             for entry in &entries {
                 let size = entry
@@ -174,11 +174,18 @@ pub async fn config(cli: Cli) -> anyhow::Result<()> {
                     truncate(&name, 32),
                     size,
                     &entry.modified_time.replace('T', " ")[..16.min(entry.modified_time.len())],
-                    truncate(if entry.is_folder() { "folder" } else { &entry.mime_type }, 24),
+                    truncate(
+                        if entry.is_folder() {
+                            "folder"
+                        } else {
+                            &entry.mime_type
+                        },
+                        24
+                    ),
                     entry.web_view_link.as_deref().unwrap_or(&entry.id)
                 );
             }
-            println!("\n{} file(s) created by transit.", entries.len());
+            println!("\n{} file(s) created by hoist.", entries.len());
         }
 
         Commands::Delete {
@@ -225,7 +232,11 @@ async fn delete(target: &str, permanent: bool, yes: bool) -> anyhow::Result<()> 
                         .size_bytes()
                         .map(|b| HumanBytes(b).to_string())
                         .unwrap_or_else(|| "-".into()),
-                    entry.modified_time.get(..16).unwrap_or("").replace('T', " "),
+                    entry
+                        .modified_time
+                        .get(..16)
+                        .unwrap_or("")
+                        .replace('T', " "),
                     entry.id
                 )
             })
@@ -267,7 +278,11 @@ async fn delete(target: &str, permanent: bool, yes: bool) -> anyhow::Result<()> 
     let prompt = if described.len() == 1 {
         format!("{verb} {}", described[0])
     } else {
-        format!("{verb}\n  {}\nAll {} items", described.join("\n  "), described.len())
+        format!(
+            "{verb}\n  {}\nAll {} items",
+            described.join("\n  "),
+            described.len()
+        )
     };
 
     if !yes
@@ -304,7 +319,7 @@ pub(crate) async fn account(action: AccountAction) -> anyhow::Result<()> {
         AccountAction::List => {
             let accounts = accounts::list()?;
             if accounts.known.is_empty() {
-                println!("No accounts connected - run `transit account add`");
+                println!("No accounts connected - run `hoist account add`");
                 return Ok(());
             }
             for entry in accounts.known.values() {
@@ -335,7 +350,7 @@ pub(crate) async fn account(action: AccountAction) -> anyhow::Result<()> {
             let email = accounts.known[&id].email.clone();
 
             if !Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("Remove {email} and revoke transit's access?"))
+                .with_prompt(format!("Remove {email} and revoke hoist's access?"))
                 .default(false)
                 .interact()?
             {
@@ -370,7 +385,7 @@ pub(crate) async fn account(action: AccountAction) -> anyhow::Result<()> {
 /// cannot silently act on the wrong account.
 fn pick_account(accounts: &Accounts, verb: &str) -> anyhow::Result<Option<String>> {
     if accounts.known.is_empty() {
-        println!("No accounts connected - run `transit account add`");
+        println!("No accounts connected - run `hoist account add`");
         return Ok(None);
     }
 

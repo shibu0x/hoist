@@ -14,7 +14,7 @@ pub struct OAuthClient {
 }
 
 fn from_env(provider: &str) -> Option<OAuthClient> {
-    let var = |suffix: &str| std::env::var(format!("TRANSIT_{}_{suffix}", provider.to_uppercase()));
+    let var = |suffix: &str| std::env::var(format!("HOIST_{}_{suffix}", provider.to_uppercase()));
 
     match (var("CLIENT_ID"), var("CLIENT_SECRET")) {
         (Ok(client_id), Ok(client_secret)) => Some(OAuthClient {
@@ -60,7 +60,7 @@ pub fn describe(provider: &str) -> Result<()> {
 
     if let Some(client) = from_env(provider) {
         println!("Client: {}", hint(&client.client_id));
-        println!("Source: TRANSIT_{upper}_CLIENT_ID / TRANSIT_{upper}_CLIENT_SECRET");
+        println!("Source: HOIST_{upper}_CLIENT_ID / HOIST_{upper}_CLIENT_SECRET");
         println!("These shadow the stored file - unset them to use the saved client.");
         return Ok(());
     }
@@ -70,7 +70,7 @@ pub fn describe(provider: &str) -> Result<()> {
             println!("Client: {}", hint(&client.client_id));
             println!("Source: {}", config_file(FILE)?.display());
         }
-        None => println!("No {provider} OAuth client set - run `transit client set`"),
+        None => println!("No {provider} OAuth client set - run `hoist client set`"),
     }
 
     Ok(())
@@ -108,7 +108,7 @@ fn hint(client_id: &str) -> String {
 }
 
 fn prompt_and_save(provider: &str) -> Result<OAuthClient> {
-    println!("transit needs a {provider} OAuth client of your own.");
+    println!("hoist needs a {provider} OAuth client of your own.");
     println!("See README.md for how to create one.\n");
 
     let client_id: String = Input::with_theme(&ColorfulTheme::default())
